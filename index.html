@@ -1,6 +1,7 @@
 <!doctype html>
 <html>
     <head>
+        <meta charset="UTF-8">
 		<script charset="UTF-8" type="text/javascript" src="../../numbas/dev/runtime/scripts/numbas.js" charset="utf-8"></script>
 		<script charset="UTF-8" type="text/javascript" src="../../numbas/dev/runtime/scripts/jme.js" charset="utf-8"></script>
 		<script charset="UTF-8" type="text/javascript" src="../../numbas/dev/runtime/scripts/jme-builtins.js" charset="utf-8"></script>
@@ -13,30 +14,89 @@
 
         <script src="peg.js"></script>
         <script src="peg-jme.js"></script>
-        <script id="peg-expander" type="peg">
-// PEG.js Grammar
-// ==============
-//
-// PEG.js grammar syntax is designed to be simple, expressive, and similar to
-// JavaScript where possible. This means that many rules, especially in the
-// lexical part, are based on the grammar from ECMA-262, 5.1 Edition [1]. Some
-// are directly taken or adapted from the JavaScript example grammar (see
-// examples/javascript.pegjs).
-//
-// Limitations:
-//
-//   * Non-BMP characters are completely ignored to avoid surrogate pair
-//     handling.
-//
-//   * One can create identifiers containing illegal characters using Unicode
-//     escape sequences. For example, "abcd\u0020efgh" is not a valid
-//     identifier, but it is accepted by the parser.
-//
-// Both limitations could be resolved, but the costs would likely outweigh
-// the benefits.
-//
-// [1] http://www.ecma-international.org/publications/standards/Ecma-262.htm
 
+        <!-- base JME grammar -->
+        <script id="base-jme" type="peg">
+{
+    var types = Numbas.jme.types;
+}
+
+StartExpression = Expression;
+
+left associative binary operator "^" precedence 2;
+binary operator "*" precedence 3;
+binary operator "/" precedence 3;
+binary operator "+" precedence 4;
+binary operator "-" precedence 4;
+binary operator "|" precedence 5;
+binary operator ".." precedence 5.5;
+binary operator "#" precedence 6;
+binary operator "except" precedence 6.5;
+binary operator "in" precedence 6.5;
+binary operator "<" precedence 7;
+binary operator ">" precedence 7;
+binary operator "<=" precedence 7;
+binary operator ">=" precedence 7;
+binary operator "<>" precedence 8;
+binary operator "=" precedence 8;
+binary operator "isa" precedence 9;
+binary operator "and" precedence 11;
+binary operator "or" precedence 12;
+binary operator "xor" precedence 13;
+binary operator "implies" precedence 14;
+binary operator "q" precedence 14;
+binary operator "@" precedence 14;
+
+AtomExpression
+  = atom:Atom trailer:Trailer {return {tok: new types.TFunc('listval'),args:[atom,trailer]}} / Atom
+
+Trailer
+  = "[" expr:Expression "]" {return expr}
+  
+atom BracketedExpression = "(" expr:Expression ")" {return expr} ;
+atom List = "[" ws args:ArgsList? ws "]" {return {tok:new types.TList(),args:args}};
+atom FunctionApplication = name:Name "(" args:ArgsList? ")" {return {tok: new types.TFunc(name.tok.name,name.tok.annotation), args: args}};
+atom LazyMultiplication = a:(NumberLiteral / BracketedExpression) ws b:BracketedExpression  {return {tok: new types.TOp('*'),args:[a,b]}} / a:(NumberLiteral / Name / BracketedExpression) ws b:Name {return {tok: new types.TOp('*'),args:[a,b]}};
+atom Literal = Bool / Name / Number / String;
+ 
+StrictArgsList = first:Expression rest:(ws "," ws arg:Expression {return arg})* {return [first].concat(rest)}
+ArgsList "arguments list" = args:StrictArgsList (ws "," ws)? {return args}
+
+Bool 
+  = v:(("true"i {return true}) / ("false"i {return false})) {return {tok: new types.TBool(v)}}
+  
+NumberLiteral = n:(int:([0-9]+) rest:("\x2E" decimals:([0-9]+) {return "."+decimals.join('')})? {return parseFloat(int+(rest? rest : ""))}) {return {tok:new types.TNum(n)}}
+
+special number "i" = {Numbas.math.complex(0,1)}
+special number "infinity" = {Infinity}
+special number "infty" = {Infinity}
+special number "e" = {Math.E}
+special number "pi" = {Math.PI}
+
+Name = AnnotatedName / BareName
+AnnotatedName = annotations:(bit:([a-zA-Z]+)":" {return bit[0]})* name:BareName {name.tok.annotation = annotations; return name}
+BareName = name:ValidName {return {tok:new types.TName(name)}}
+RawName = dollar:"$"? chars:(a:[a-zA-Z_] rest:[a-zA-Z0-9_]* {return a+rest.join('')}) primes:"'"* {return (dollar||"")+chars+(primes.join(''))}
+
+prefix operator "+";
+prefix operator "-";
+prefix operator "!" as "not";
+
+postfix operator "!" as "fact";
+
+String 
+  = 
+   s:(  '"' characters:("\\n" {return '\n'} / c:[{}] {return '\\'+c} / "\\" c:. {return c}/[^"])* '"' {return characters.join('')}
+    / "'" characters:("\\" c:. {return c}/[^'])* "'" {return characters.join('')}
+   ) {return {tok:new types.TString(s)}}
+  
+ws "whitespace" = [ \t\n]*
+        </script>
+
+
+
+        <!-- expanded peg.js parser grammar -->
+        <script id="peg-expander" type="peg">
 {
   const OPS_TO_PREFIXED_TYPES = {
     "$": "text",
@@ -586,103 +646,38 @@ EOF
   = !.
 
         </script>
-        <script id="base-jme" type="peg">
-{
-    var types = Numbas.jme.types;
-}
-
-StartExpression = Expression;
-
-left associative binary operator "^" precedence 2;
-binary operator "*" precedence 3;
-binary operator "/" precedence 3;
-binary operator "+" precedence 4;
-binary operator "-" precedence 4;
-binary operator "|" precedence 5;
-binary operator ".." precedence 5.5;
-binary operator "#" precedence 6;
-binary operator "except" precedence 6.5;
-binary operator "in" precedence 6.5;
-binary operator "<" precedence 7;
-binary operator ">" precedence 7;
-binary operator "<=" precedence 7;
-binary operator ">=" precedence 7;
-binary operator "<>" precedence 8;
-binary operator "=" precedence 8;
-binary operator "isa" precedence 9;
-binary operator "and" precedence 11;
-binary operator "or" precedence 12;
-binary operator "xor" precedence 13;
-binary operator "implies" precedence 14;
-binary operator "q" precedence 14;
-binary operator "@" precedence 14;
-
-AtomExpression
-  = atom:Atom trailer:Trailer {return {tok: new types.TFunc('listval'),args:[atom,trailer]}} / Atom
-
-Trailer
-  = "[" expr:Expression "]" {return expr}
-  
-atom BracketedExpression = "(" expr:Expression ")" {return expr} ;
-atom List = "[" ws args:ArgsList? ws "]" {return {tok:new types.TList(),args:args}};
-atom FunctionApplication = name:Name "(" args:ArgsList? ")" {return {tok: new types.TFunc(name.tok.name,name.tok.annotation), args: args}};
-atom LazyMultiplication = a:(NumberLiteral / BracketedExpression) ws b:BracketedExpression  {return {tok: new types.TOp('*'),args:[a,b]}} / a:(NumberLiteral / Name / BracketedExpression) ws b:Name {return {tok: new types.TOp('*'),args:[a,b]}};
-atom Literal = Bool / Name / Number / String;
- 
-StrictArgsList = first:Expression rest:(ws "," ws arg:Expression {return arg})* {return [first].concat(rest)}
-ArgsList "arguments list" = args:StrictArgsList (ws "," ws)? {return args}
-
-Bool 
-  = v:(("true"i {return true}) / ("false"i {return false})) {return {tok: new types.TBool(v)}}
-  
-NumberLiteral = n:(int:([0-9]+) rest:("\x2E" decimals:([0-9]+) {return "."+decimals.join('')})? {return parseFloat(int+(rest? rest : ""))}) {return {tok:new types.TNum(n)}}
-
-special number "i" = {Numbas.math.complex(0,1)}
-special number "infinity" = {Infinity}
-special number "infty" = {Infinity}
-special number "e" = {Math.E}
-special number "pi" = {Math.PI}
-
-Name = AnnotatedName / BareName
-AnnotatedName = annotations:(bit:([a-zA-Z]+)":" {return bit[0]})* name:BareName {name.tok.annotation = annotations; return name}
-BareName = name:ValidName {return {tok:new types.TName(name)}}
-RawName = dollar:"$"? chars:(a:[a-zA-Z_] rest:[a-zA-Z0-9_]* {return a+rest.join('')}) primes:"'"* {return (dollar||"")+chars+(primes.join(''))}
-
-prefix operator "+";
-prefix operator "-";
-prefix operator "!" as "not";
-
-postfix operator "!" as "fact";
-
-String 
-  = 
-   s:(  '"' characters:("\\n" {return '\n'} / c:[{}] {return '\\'+c} / "\\" c:. {return c}/[^"])* '"' {return characters.join('')}
-    / "'" characters:("\\" c:. {return c}/[^'])* "'" {return characters.join('')}
-   ) {return {tok:new types.TString(s)}}
-  
-ws "whitespace" = [ \t\n]*
-        </script>
         <style>
             textarea {
                 width:100%;
-                height: 30em;
+                height: 15em;
             }
         </style>
     </head>
     <body>
-        <label for="extra-grammar">Grammar</label>
-        <textarea id="extra-grammar">
-atom Lambda = params:(first:Name rest:("," name:Name {return name})* {return [first].concat(rest)}) ws "->" ws expr:Expression {return {type:"lambda",params:params,expr:expr}};
-atom Interval "interval" = start:("["/"(") a:Expression "," b:Expression end:("]"/")") {return {type:"interval",start:start,end:end,from:a,to:b}};
-atom Vector "vector" = "(" args:ArgsList ")" {return {tok: new types.TFunc('vector'),args:args}};
-atom Set "set" = "{" args:ArgsList "}" {return {type:"set",value:args}};
-atom SetBuilder = "{" defs:StrictArgsList ws "|" ws conditions:StrictArgsList "}" {return {type:"set",defs:defs,conditions:conditions}};
-        </textarea>
-        <label for="expression">Expression</label>
-        <textarea id="expression">in_code</textarea>
-        <label for="result">Result</label>
-        <pre id="result"></pre>
-        <label for="jme">JME</label>
-        <pre id="jme"></pre>
+        <div class="explanation">
+            <p>Customise the JME grammar using a <a href="http://pegjs.org">peg.js</a> specification.</p>
+            <p>There are some special rules to add new operators, atomic data types, and special number names.</p>
+            <p>Uncomment some of the rules below, and have a look at the base grammar in the source of this page.</p>
+        </div>
+        <div class="controls">
+            <label for="extra-grammar">Grammar</label>
+            <textarea id="extra-grammar">
+//atom Lambda = params:(first:Name rest:("," name:Name {return name})* {return [first].concat(rest)}) ws "->" ws expr:Expression {return {type:"lambda",params:params,expr:expr}}; // x -> x+1
+//atom Interval "interval" = start:("["/"(") a:Expression "," b:Expression end:("]"/")") {return {type:"interval",start:start,end:end,from:a,to:b}}; // [start,end)
+atom Vector "vector" = "(" args:ArgsList ")" {return {tok: new types.TFunc('vector'),args:args}}; // (x,y1,z)
+//atom Set "set" = "{" args:ArgsList "}" {return {tok: new types.TFunc("set"),args:args}}; // {1,2,3}
+//atom SetBuilder = "{" defs:StrictArgsList ws "|" ws conditions:StrictArgsList "}" {return {type:"set",defs:defs,conditions:conditions}}; // {x|x>1}
+left associative binary operator "%" precedence 2;
+binary operator "mash" precedence 11;
+prefix operator "@";
+postfix operator "£";
+            </textarea>
+            <label for="expression">Expression</label>
+            <textarea id="expression">x+1/2</textarea>
+            <label for="result">Result</label>
+            <pre id="result"></pre>
+            <label for="jme">JME</label>
+            <pre id="jme"></pre>
+        </div>
     </body>
 </html>
