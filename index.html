@@ -2,15 +2,15 @@
 <html>
     <head>
         <meta charset="UTF-8">
-		<script charset="UTF-8" type="text/javascript" src="../../numbas/dev/runtime/scripts/numbas.js" charset="utf-8"></script>
-		<script charset="UTF-8" type="text/javascript" src="../../numbas/dev/runtime/scripts/jme.js" charset="utf-8"></script>
-		<script charset="UTF-8" type="text/javascript" src="../../numbas/dev/runtime/scripts/jme-builtins.js" charset="utf-8"></script>
-		<script charset="UTF-8" type="text/javascript" src="../../numbas/dev/runtime/scripts/jme-display.js" charset="utf-8"></script>
-		<script charset="UTF-8" type="text/javascript" src="../../numbas/dev/runtime/scripts/math.js" charset="utf-8"></script>
-		<script charset="UTF-8" type="text/javascript" src="../../numbas/dev/runtime/scripts/util.js" charset="utf-8"></script>
-		<script charset="UTF-8" type="text/javascript" src="../../numbas/dev/runtime/scripts/jquery/jquery.js"></script>
-		<script charset="UTF-8" type="text/javascript" src="../../numbas/dev/runtime/scripts/R/R.js"></script>
-		<script charset="UTF-8" type="text/javascript" src="../../numbas/dev/locales/en-GB.js"></script>
+		<script charset="UTF-8" type="text/javascript" src="jme/numbas.js" charset="utf-8"></script>
+		<script charset="UTF-8" type="text/javascript" src="jme/jme.js" charset="utf-8"></script>
+		<script charset="UTF-8" type="text/javascript" src="jme/jme-builtins.js" charset="utf-8"></script>
+		<script charset="UTF-8" type="text/javascript" src="jme/jme-display.js" charset="utf-8"></script>
+		<script charset="UTF-8" type="text/javascript" src="jme/math.js" charset="utf-8"></script>
+		<script charset="UTF-8" type="text/javascript" src="jme/util.js" charset="utf-8"></script>
+		<script charset="UTF-8" type="text/javascript" src="jme/jquery.js"></script>
+		<script charset="UTF-8" type="text/javascript" src="jme/R.js"></script>
+		<script charset="UTF-8" type="text/javascript" src="jme/en-GB.js"></script>
 
         <script src="peg.js"></script>
         <script src="peg-jme.js"></script>
@@ -56,7 +56,9 @@ Trailer
 atom BracketedExpression = "(" expr:Expression ")" {return expr} ;
 atom List = "[" ws args:ArgsList? ws "]" {return {tok:new types.TList(),args:args}};
 atom FunctionApplication = name:Name "(" args:ArgsList? ")" {return {tok: new types.TFunc(name.tok.name,name.tok.annotation), args: args}};
-atom LazyMultiplication = a:(NumberLiteral / BracketedExpression) ws b:BracketedExpression  {return {tok: new types.TOp('*'),args:[a,b]}} / a:(NumberLiteral / Name / BracketedExpression) ws b:Name {return {tok: new types.TOp('*'),args:[a,b]}};
+atom LazyMultiplication 
+  = a:(NumberLiteral / BracketedExpression) ws b:(BracketedExpression)  {return {tok: new types.TOp('*'),args:[a,b]}} 
+  / a:(NumberLiteral / Name / BracketedExpression) ws b:(Name / SpecialNumber) {return {tok: new types.TOp('*'),args:[a,b]}};
 atom Literal = Bool / Name / Number / String;
  
 StrictArgsList = first:Expression rest:(ws "," ws arg:Expression {return arg})* {return [first].concat(rest)}
@@ -145,14 +147,14 @@ Initializer
       return { type: "initializer", code: code, location: location() };
     }
 
-Line = OpDefinition / AtomDefinition / SpecialNumberDefinition / Rule
+Line = OpDefinition / AtomDefinition / SpecialNumberDefinition / ReservedWordDefinition / Rule
 
 OpDefinition 
   = leftAssoc:(__ "left" __ "associative" __ {return true})? "binary" __ "operator" __ name:StringLiteral __ "precedence" __ precedence:FloatLiteral realName:(__ "as" __ realName:StringLiteral {return realName})? EOS {return {type:"operator",kind:"binary",name:name,precedence:precedence,realName:realName,leftAssoc:leftAssoc}}
   / kind:("prefix"/"postfix") __ "operator" __ name:StringLiteral realName:(__ "as" __ realName:StringLiteral {return realName})? EOS {return {type:"operator",kind:kind,name:name,realName:realName}}
 AtomDefinition = "atom" __ rule:Rule EOS {return {type:"atom",rule:rule}}
-
-SpecialNumberDefinition = "special" __ "number" __ name:StringLiteral __ "=" __ code:CodeBlock {return {type:'special number',name:name,code:code}}
+SpecialNumberDefinition = "special" __ "number" __ name:StringLiteral __ "=" __ code:CodeBlock EOS {return {type:'special number',name:name,code:code}}
+ReservedWordDefinition = "reserved" __ "word" __ name:StringLiteral EOS {return {type:'reserved word',name:name}}
 
 Rule
   = name:IdentifierName __

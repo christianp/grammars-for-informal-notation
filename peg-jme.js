@@ -15,6 +15,7 @@ function makeGrammar(grammar) {
     var baseRules = [];
     var extraRules = [];
     var specialNumbers = [];
+    var reservedWords = [];
 
     /* run through the source, picking out op and atom definitions */
     function expandRules(grammar,outList) {
@@ -38,6 +39,9 @@ function makeGrammar(grammar) {
                 break;
             case 'special number':
                 specialNumbers.push(rule);
+                break;
+            case 'reserved word':
+                reservedWords.push(rule);
                 break;
             case 'rule':
                 outList.push(rule);
@@ -95,8 +99,8 @@ function makeGrammar(grammar) {
         nextRule = name;
     }
 
-    var allOps = binaryOps.concat(prefixOps,postfixOps,specialNumbers).map(function(r){ return r.name });
-    opRules.splice(0,0,'ValidName = name:RawName !{return '+JSON.stringify(allOps)+'.indexOf(name)>=0} {return name}');
+    var allReservedWords = reservedWords.concat(binaryOps,prefixOps,postfixOps,specialNumbers).map(function(r){ return r.name });
+    opRules.splice(0,0,'ValidName = name:RawName !{return '+JSON.stringify(allReservedWords)+'.indexOf(name)>=0} {return name}');
 
     opRules.splice(0,0,'PrefixExpression = op:('+prefixOps.map(wrapOpName).join(' / ')+') ws arg:PostfixExpression {return {tok: new types.TOp(op,false,true),args:[arg]}} / PostfixExpression');
 
@@ -184,10 +188,15 @@ window.onload = function() {
             var res = g.parse(expression);
             console.log(res);
             resultArea.textContent = JSON.stringify(res);
+        } catch(e) {
+            resultArea.textContent = 'Error: '+ e.message+'\n'+JSON.stringify(e.location);
+            throw(e);
+        }
+        try {
             var jme = Numbas.jme.display.treeToJME(res);
             jmeArea.textContent = jme;
         } catch(e) {
-            resultArea.textContent = 'Error: '+ e.message+'\n'+JSON.stringify(e.location);
+            jmeArea.textContent = 'Error: '+e.message;
         }
         debounce = null;
     }
