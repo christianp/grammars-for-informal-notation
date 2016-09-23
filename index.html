@@ -62,7 +62,7 @@ atom LazyMultiplication
 atom Literal = Bool / Name / Number / String;
  
 StrictArgsList = first:Expression rest:(ws "," ws arg:Expression {return arg})* {return [first].concat(rest)}
-ArgsList "arguments list" = args:StrictArgsList (ws "," ws)? {return args}
+ArgsList "arguments list" = args:StrictArgsList? (ws "," ws)? {return args||[]}
 
 Bool 
   = v:(("true"i {return true}) / ("false"i {return false})) {return {tok: new types.TBool(v)}}
@@ -76,7 +76,7 @@ special number "e" = {Math.E}
 special number "pi" = {Math.PI}
 
 Name = AnnotatedName / BareName
-AnnotatedName = annotations:(bit:([a-zA-Z]+)":" {return bit[0]})* name:BareName {name.tok.annotation = annotations; return name}
+AnnotatedName = annotations:(bit:([a-zA-Z]+)":" {return bit.join('')})* name:BareName {name.tok.annotation = annotations; return name}
 BareName = name:ValidName {return {tok:new types.TName(name)}}
 RawName = dollar:"$"? chars:(a:[a-zA-Z_] rest:[a-zA-Z0-9_]* {return a+rest.join('')}) primes:"'"* {return (dollar||"")+chars+(primes.join(''))}
 
@@ -651,7 +651,15 @@ EOF
         <style>
             textarea {
                 width:100%;
-                height: 15em;
+                height: 10em;
+            }
+            #presets {
+                list-style: none;
+                padding: 0;
+            }
+            #presets li {
+                display: inline-block;
+                margin: 0 1em 0 0;
             }
         </style>
     </head>
@@ -659,20 +667,13 @@ EOF
         <div class="explanation">
             <p>Customise the JME grammar using a <a href="http://pegjs.org">peg.js</a> specification.</p>
             <p>There are some special rules to add new operators, atomic data types, and special number names.</p>
-            <p>Uncomment some of the rules below, and have a look at the base grammar in the source of this page.</p>
         </div>
         <div class="controls">
+            <h2>Presets</h2>
+            <ul id="presets">
+            </ul>
             <label for="extra-grammar">Grammar</label>
             <textarea id="extra-grammar">
-//atom Lambda = params:(first:Name rest:("," name:Name {return name})* {return [first].concat(rest)}) ws "->" ws expr:Expression {return {type:"lambda",params:params,expr:expr}}; // x -> x+1
-//atom Interval "interval" = start:("["/"(") a:Expression "," b:Expression end:("]"/")") {return {type:"interval",start:start,end:end,from:a,to:b}}; // [start,end)
-atom Vector "vector" = "(" args:ArgsList ")" {return {tok: new types.TFunc('vector'),args:args}}; // (x,y1,z)
-//atom Set "set" = "{" args:ArgsList "}" {return {tok: new types.TFunc("set"),args:args}}; // {1,2,3}
-//atom SetBuilder = "{" defs:StrictArgsList ws "|" ws conditions:StrictArgsList "}" {return {type:"set",defs:defs,conditions:conditions}}; // {x|x>1}
-left associative binary operator "%" precedence 2;
-binary operator "mash" precedence 11;
-prefix operator "@";
-postfix operator "£";
             </textarea>
             <label for="expression">Expression</label>
             <textarea id="expression">x+1/2</textarea>

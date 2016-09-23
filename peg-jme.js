@@ -1,13 +1,13 @@
 var expander;
 var baseSource;
+var start_time,end_time;
 
 var rightAssocBinaryOpAction = "let out = a; ops.forEach(function(o){ out = {tok:o.op,args:[out,o.b]}}); return out";
 var leftAssocBinaryOpAction = 'return {tok: (new types.TOp(op)),args:[a,b]}';
 
 function makeGrammar(grammar) {
-    console.clear();
     var baseGrammar = expander.parse(baseSource);
-    var newGrammar = expander.parse(grammar);
+    var newGrammar;
     var atoms = [];
     var binaryOps = [];
     var prefixOps = [];
@@ -50,7 +50,13 @@ function makeGrammar(grammar) {
         });
     }
     expandRules(baseGrammar,baseRules);
-    expandRules(newGrammar,extraRules);
+    grammar = grammar.trim();
+    if(grammar) {
+        var newGrammar = expander.parse(grammar);
+        expandRules(newGrammar,extraRules);
+    } else {
+        newGrammar = baseGrammar;
+    }
 
     /* Now we'll write a load of extra rules for the ops and atoms */
     var opRules = [];
@@ -121,7 +127,6 @@ function makeGrammar(grammar) {
 
     /* compile the op/atom rules and add them to the base grammar */
     var opSource = opRules.join('\n');
-    console.log(opSource);
     var opGrammar = peg.parser.parse(opSource);
     baseRules = baseRules.concat(opGrammar.rules);
 
@@ -181,12 +186,12 @@ window.onload = function() {
     var jmeArea = document.getElementById('jme');
 
     function go() {
+        start_time = new Date();
         var source = grammarArea.value;
         var expression = exprArea.value;
         try {
             var g = window.g = makeGrammar(source);
             var res = g.parse(expression);
-            console.log(res);
             resultArea.textContent = JSON.stringify(res);
         } catch(e) {
             resultArea.textContent = 'Error: '+ e.message+'\n'+JSON.stringify(e.location);
@@ -199,6 +204,8 @@ window.onload = function() {
             jmeArea.textContent = 'Error: '+e.message;
         }
         debounce = null;
+        end_time = new Date();
+        resultArea.textContent += '\n'+(end_time-start_time)+'ms';
     }
     var debounce = null;
     function debounce_go() {
@@ -210,6 +217,69 @@ window.onload = function() {
     grammarArea.oninput = debounce_go;
     exprArea.oninput = debounce_go;
     go();
+
+    function elem(name,attrs,children) {
+        var e = document.createElement(name);
+        if(attrs) {
+            for(var x in attrs) {
+                e.setAttribute(x,attrs[x]);
+            }
+        }
+        if(children) {
+            children.forEach(function(c){ e.appendChild(c) });
+        }
+        return e;
+    }
+    presets.forEach(function(p) {
+        var radio = elem('input',{type:'radio',name:'preset'});
+        var l = elem('li',{class:'preset'},[
+            elem('label',{},[radio,document.createTextNode(p.name)])
+        ]);
+        radio.onchange = function() {
+            grammarArea.value = p.code;
+            exprArea.value = p.jme;
+            go();
+        }
+        document.getElementById('presets').appendChild(l);
+    });
 }
 });
 
+
+var presets = [
+    {
+        name: "list comprehension",
+        code: "reserved word \"for\";\natom ListComprehension = \"[\" ws expr:Expression ws \"for\" ws name:Name ws \"in\" ws list:Expression ws \"]\"  {return {tok: new types.TFunc('map'),args:[expr,name,list]}};",
+        jme: "[x^2 for x in [1,2,3]]"
+    },
+    {
+        name: "set literal",
+        code: "atom Set = \"{\" ws args:ArgsList ws \"}\" {return {tok:new types.TFunc('set'),args:args}};",
+        jme: "{1,2,3}"
+    },
+    {
+        name: "vector literal",
+        code: "atom Vector \"vector\" = \"(\" args:ArgsList \")\" {return {tok: new types.TFunc('vector'),args:args}};",
+        jme: "(1,2,3,4)"
+    },
+    {
+        name: "interval",
+        code: "atom Interval \"interval\" = start:( \"[\" / \"(\" ) a:Expression \",\" b:Expression end:( \"]\" / \")\" ) {return {tok: new types.TFunc('interval'), args: [{tok:new types.TBool(start=='[')},a,{tok:new types.TBool(end==']')},b]}};\nList = Interval // override usual list atom",
+        jme: "[x,y) + (x,y) + (x,y] + [x,y]"
+    },
+    {
+        name: "operators",
+        code: "left associative binary operator \"%\" precedence 2;\nbinary operator \"mash\" precedence 11;\nprefix operator \"@\";\npostfix operator \"£\";",
+        jme: "(x%3) + (x mash y) + @x + x£"
+    },
+    {
+        name: "dictionary literal",
+        code: "KeyPair = name:Name ws \":\" ws expr:Expression {return {tok: new types.TList(),args:[name,expr]}};\nKeyPairList = first:KeyPair rest:(ws \",\" ws pair:KeyPair {return pair})* {return [first].concat(rest)};\natom Dictionary = \"{\" ws keypairs:KeyPairList ws \"}\" {return {tok: new types.TFunc('dict'),args:keypairs}}",
+        jme: "{a: 1, b: 2}"
+    },
+    {
+        name: 'lisp!',
+        code: "Expression = LispExpression / Atom\nLispExpression = \"(\" ws op:Name args:(ws atom:Expression ws {return atom})* \")\" {return {tok:new types.TFunc(op.tok.name),args:args}}",
+        jme: '(plus (minus x 1) 2)'
+    }
+];
