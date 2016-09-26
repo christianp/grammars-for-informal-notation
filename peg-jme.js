@@ -1,6 +1,6 @@
 var expander;
 var baseSource;
-var start_time,end_time;
+var parser;
 
 var rightAssocBinaryOpAction = "let out = a; ops.forEach(function(o){ out = {tok:o.op,args:[out,o.b]}}); return out";
 var leftAssocBinaryOpAction = 'return {tok: (new types.TOp(op)),args:[a,b]}';
@@ -180,21 +180,36 @@ window.onload = function() {
     expander = peg.generate(expanderSource);
     baseSource = document.getElementById('base-jme').textContent;
 
+    document.getElementById('show-base-jme').textContent = baseSource;
+
     var grammarArea = document.getElementById('extra-grammar');
     var exprArea = document.getElementById('expression');
     var resultArea = document.getElementById('result');
     var jmeArea = document.getElementById('jme');
 
     function go() {
-        start_time = new Date();
         var source = grammarArea.value;
-        var expression = exprArea.value;
         try {
-            var g = window.g = makeGrammar(source);
-            var res = g.parse(expression);
-            resultArea.textContent = JSON.stringify(res);
+            parser = makeGrammar(source);
+            parse_jme();
         } catch(e) {
             resultArea.textContent = 'Error: '+ e.message+'\n'+JSON.stringify(e.location);
+            throw(e);
+        }
+    }
+    function parse_jme() {
+        var expression = exprArea.value.trim();
+        if(!expression) {
+            jmeArea.textContent = '';
+            resultArea.textContent = '';
+            return;
+        }
+        try {
+            var res = parser.parse(expression);
+            resultArea.textContent = JSON.stringify(res,null,'  ');
+        } catch(e) {
+            resultArea.textContent = 'Error: '+ e.message+'\n'+JSON.stringify(e.location);
+            jmeArea.textContent = '';
             throw(e);
         }
         try {
@@ -204,18 +219,19 @@ window.onload = function() {
             jmeArea.textContent = 'Error: '+e.message;
         }
         debounce = null;
-        end_time = new Date();
-        resultArea.textContent += '\n'+(end_time-start_time)+'ms';
     }
-    var debounce = null;
-    function debounce_go() {
-        if(debounce) {
-            clearTimeout(debounce);
+    function debounce(fn,delay) {
+        delay = delay || 100;
+        var t = null;
+        return function() {
+            if(t) {
+                clearTimeout(t);
+            }
+            t = setTimeout(fn,delay);
         }
-        debounce = setTimeout(go,100);
     }
-    grammarArea.oninput = debounce_go;
-    exprArea.oninput = debounce_go;
+    grammarArea.oninput = debounce(go,100);
+    exprArea.oninput = debounce(parse_jme,20);
     go();
 
     function elem(name,attrs,children) {
@@ -260,7 +276,7 @@ var presets = [
     {
         name: "vector literal",
         code: "atom Vector \"vector\" = \"(\" args:ArgsList \")\" {return {tok: new types.TFunc('vector'),args:args}};",
-        jme: "(1,2,3,4)"
+        jme: "(1,2,3)+(-2,3,1/2)"
     },
     {
         name: "interval",

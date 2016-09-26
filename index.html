@@ -80,8 +80,8 @@ AnnotatedName = annotations:(bit:([a-zA-Z]+)":" {return bit.join('')})* name:Bar
 BareName = name:ValidName {return {tok:new types.TName(name)}}
 RawName = dollar:"$"? chars:(a:[a-zA-Z_] rest:[a-zA-Z0-9_]* {return a+rest.join('')}) primes:"'"* {return (dollar||"")+chars+(primes.join(''))}
 
-prefix operator "+";
-prefix operator "-";
+prefix operator "+" as "+u";
+prefix operator "-" as "-u";
 prefix operator "!" as "not";
 
 postfix operator "!" as "fact";
@@ -649,6 +649,26 @@ EOF
 
         </script>
         <style>
+            html {
+                font-family: sans-serif;
+            }
+            @media screen and (min-width: 768px) {
+                body {
+                    display: flex;
+                }
+                section {
+                    flex: 50%;
+                    margin: 0 0.5em;
+                    padding: 0.5em;
+                }
+                section.base {
+                    flex: 30em;
+                    background: #eee;
+                }
+            }
+            pre {
+                white-space: pre-wrap;
+            }
             textarea {
                 width:100%;
                 height: 10em;
@@ -660,27 +680,35 @@ EOF
             #presets li {
                 display: inline-block;
                 margin: 0 1em 0 0;
+                line-height: 1.6em;
             }
         </style>
     </head>
     <body>
-        <div class="explanation">
-            <p>Customise the JME grammar using a <a href="http://pegjs.org">peg.js</a> specification.</p>
-            <p>There are some special rules to add new operators, atomic data types, and special number names.</p>
-        </div>
-        <div class="controls">
-            <h2>Presets</h2>
-            <ul id="presets">
-            </ul>
-            <label for="extra-grammar">Grammar</label>
-            <textarea id="extra-grammar">
-            </textarea>
-            <label for="expression">Expression</label>
-            <textarea id="expression">x+1/2</textarea>
-            <label for="result">Result</label>
-            <pre id="result"></pre>
-            <label for="jme">JME</label>
-            <pre id="jme"></pre>
-        </div>
+        <section class="interactive">
+            <div class="explanation">
+                <p>Customise the JME grammar using a <a href="http://pegjs.org">peg.js</a> specification.</p>
+                <p>There are some special rules to add new operators, atomic data types, and special number names.</p>
+                <p>This doesn't affect the way parsed expressions are subsequently rendered - using the grammar specification in the other direction would be difficult!</p>
+            </div>
+            <div class="controls">
+                <h2>Presets</h2>
+                <ul id="presets">
+                </ul>
+                <h2>Experiment</h2>
+                <label for="extra-grammar">Grammar</label>
+                <textarea id="extra-grammar"></textarea>
+                <label for="expression">Expression</label>
+                <textarea id="expression">x+1/2</textarea>
+                <label for="jme">JME</label>
+                <pre id="jme"></pre>
+                <label for="result">Result</label>
+                <pre id="result"></pre>
+            </div>
+        </section>
+        <section class="base">
+            <h2>Base grammar</h2>
+            <pre id="show-base-jme"></pre>
+        </section>
     </body>
 </html>
