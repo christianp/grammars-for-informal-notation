@@ -1,11 +1,7 @@
-var expander;
-var baseSource;
-var parser;
-
-var rightAssocBinaryOpAction = "let out = a; ops.forEach(function(o){ out = {tok:o.op,args:[out,o.b]}}); return out";
-var leftAssocBinaryOpAction = 'return {tok: (new types.TOp(op)),args:[a,b]}';
-
 function makeGrammar(grammar) {
+    var rightAssocBinaryOpAction = "let out = a; ops.forEach(function(o){ out = {tok:o.op,args:[out,o.b]}}); return out";
+    var leftAssocBinaryOpAction = 'return {tok: (new types.TOp(op)),args:[a,b]}';
+
     var baseGrammar = expander.parse(baseSource);
     var newGrammar;
     var atoms = [];
@@ -16,6 +12,7 @@ function makeGrammar(grammar) {
     var extraRules = [];
     var specialNumbers = [];
     var reservedWords = [];
+    var removeOps = [];
 
     /* run through the source, picking out op and atom definitions */
     function expandRules(grammar,outList) {
@@ -33,8 +30,11 @@ function makeGrammar(grammar) {
                     postfixOps.push(rule);
                 }
                 break;
+            case 'remove-op':
+                removeOps.push(rule.name);
+                break;
             case 'atom':
-                atoms.push(rule.rule.name);
+                atoms.push({name:rule.rule.name,before:rule.before});
                 outList.push(rule.rule);
                 break;
             case 'special number':
@@ -58,16 +58,35 @@ function makeGrammar(grammar) {
         newGrammar = baseGrammar;
     }
 
+    /* Filter out removed op names */
+    binaryOps = binaryOps.filter(function(rule){return removeOps.indexOf(rule.name)==-1});
+    prefixOps = prefixOps.filter(function(rule){return removeOps.indexOf(rule.name)==-1});
+    postfixOps = postfixOps.filter(function(rule){return removeOps.indexOf(rule.name)==-1});
+
     /* Now we'll write a load of extra rules for the ops and atoms */
     var opRules = [];
 
     /* list atoms */
-    opRules.push('Atom = '+atoms.join(" / "));
+    var ordered_atoms = [];
+    atoms.forEach(function(a) {
+        if(a.before) {
+            var i = ordered_atoms.indexOf(a.before);
+            if(i>=0) {
+                ordered_atoms.splice(i,0,a.name);
+            } else {
+                ordered_atoms.push(a.name);
+            }
+        } else {
+            ordered_atoms.push(a.name);
+        }
+    });
+    console.log(ordered_atoms);
+    opRules.push('Atom = '+ordered_atoms.join(" / "));
 
     /* make binary ops, in order of precedence */
     binaryOps.sort(function(a,b){return a.precedence > b.precedence ? 1 : a.precedence<b.precedence ? -1 : 0});
     var i = 0;
-    var nextRule = "PrefixExpression";
+    var nextRule = "AtomExpression";
     var level = 0;
     function wrapOpName(r) {
         return '"'+r.name+'"i'+(r.realName ? ' {return "'+r.realName+'"}' : '');
@@ -108,12 +127,13 @@ function makeGrammar(grammar) {
     var allReservedWords = reservedWords.concat(binaryOps,prefixOps,postfixOps,specialNumbers).map(function(r){ return r.name });
     opRules.splice(0,0,'ValidName = name:RawName !{return '+JSON.stringify(allReservedWords)+'.indexOf(name)>=0} {return name}');
 
-    opRules.splice(0,0,'PrefixExpression = op:('+prefixOps.map(wrapOpName).join(' / ')+') ws arg:PostfixExpression {return {tok: new types.TOp(op,false,true),args:[arg]}} / PostfixExpression');
+    opRules.splice(0,0,'PrefixExpression = op:('+prefixOps.map(wrapOpName).join(' / ')+') ws arg:PrefixExpression {return {tok: new types.TOp(op,false,true),args:[arg]}} / PostfixExpression');
 
-    opRules.splice(0,0,'PostfixExpression = arg:AtomExpression ws op:('+postfixOps.map(wrapOpName).join(' / ')+') {return {tok: new types.TOp(op,true,false),args:[arg]}} / AtomExpression');
+    opRules.splice(0,0,'PostfixExpression = arg:BinaryExpression ws ops:('+postfixOps.map(wrapOpName).join(' / ')+')* {for(var i=0;i<ops.length;i++){arg = {tok:new types.TOp(ops[i],true,false),args:[arg]}}; return arg}');
+    opRules.splice(0,0,'BinaryExpression = '+nextRule);
 
     /* the top Expression rule */
-    opRules.splice(0,0,'Expression "expression" = '+nextRule);
+    opRules.splice(0,0,'Expression "expression" = PrefixExpression');
 
     if(specialNumbers.length) {
         specialNumbers = specialNumbers.sort(sortByNameLength);
@@ -172,130 +192,3 @@ function makeGrammar(grammar) {
     var parser = peg.compiler.compile(newGrammar,convertPasses(peg.compiler.passes),options);
     return parser;
 }
-
-Numbas.queueScript('base',['jquery'],function() {});
-Numbas.queueScript('go',['jme'],function() {
-window.onload = function() {
-    var expanderSource = document.getElementById('peg-expander').textContent;
-    expander = peg.generate(expanderSource);
-    baseSource = document.getElementById('base-jme').textContent;
-
-    document.getElementById('show-base-jme').textContent = baseSource;
-
-    var grammarArea = document.getElementById('extra-grammar');
-    var exprArea = document.getElementById('expression');
-    var resultArea = document.getElementById('result');
-    var jmeArea = document.getElementById('jme');
-
-    function go() {
-        var source = grammarArea.value;
-        try {
-            parser = makeGrammar(source);
-            parse_jme();
-        } catch(e) {
-            resultArea.textContent = 'Error: '+ e.message+'\n'+JSON.stringify(e.location);
-            throw(e);
-        }
-    }
-    function parse_jme() {
-        var expression = exprArea.value.trim();
-        if(!expression) {
-            jmeArea.textContent = '';
-            resultArea.textContent = '';
-            return;
-        }
-        try {
-            var res = parser.parse(expression);
-            resultArea.textContent = JSON.stringify(res,null,'  ');
-        } catch(e) {
-            resultArea.textContent = 'Error: '+ e.message+'\n'+JSON.stringify(e.location);
-            jmeArea.textContent = '';
-            throw(e);
-        }
-        try {
-            var jme = Numbas.jme.display.treeToJME(res);
-            jmeArea.textContent = jme;
-        } catch(e) {
-            jmeArea.textContent = 'Error: '+e.message;
-        }
-        debounce = null;
-    }
-    function debounce(fn,delay) {
-        delay = delay || 100;
-        var t = null;
-        return function() {
-            if(t) {
-                clearTimeout(t);
-            }
-            t = setTimeout(fn,delay);
-        }
-    }
-    grammarArea.oninput = debounce(go,100);
-    exprArea.oninput = debounce(parse_jme,20);
-    go();
-
-    function elem(name,attrs,children) {
-        var e = document.createElement(name);
-        if(attrs) {
-            for(var x in attrs) {
-                e.setAttribute(x,attrs[x]);
-            }
-        }
-        if(children) {
-            children.forEach(function(c){ e.appendChild(c) });
-        }
-        return e;
-    }
-    presets.forEach(function(p) {
-        var radio = elem('input',{type:'radio',name:'preset'});
-        var l = elem('li',{class:'preset'},[
-            elem('label',{},[radio,document.createTextNode(p.name)])
-        ]);
-        radio.onchange = function() {
-            grammarArea.value = p.code;
-            exprArea.value = p.jme;
-            go();
-        }
-        document.getElementById('presets').appendChild(l);
-    });
-}
-});
-
-
-var presets = [
-    {
-        name: "list comprehension",
-        code: "reserved word \"for\";\natom ListComprehension = \"[\" ws expr:Expression ws \"for\" ws name:Name ws \"in\" ws list:Expression ws \"]\"  {return {tok: new types.TFunc('map'),args:[expr,name,list]}};",
-        jme: "[x^2 for x in [1,2,3]]"
-    },
-    {
-        name: "set literal",
-        code: "atom Set = \"{\" ws args:ArgsList ws \"}\" {return {tok:new types.TFunc('set'),args:args}};",
-        jme: "{1,2,3}"
-    },
-    {
-        name: "vector literal",
-        code: "atom Vector \"vector\" = \"(\" args:ArgsList \")\" {return {tok: new types.TFunc('vector'),args:args}};",
-        jme: "(1,2,3)+(-2,3,1/2)"
-    },
-    {
-        name: "interval",
-        code: "atom Interval \"interval\" = start:( \"[\" / \"(\" ) a:Expression \",\" b:Expression end:( \"]\" / \")\" ) {return {tok: new types.TFunc('interval'), args: [{tok:new types.TBool(start=='[')},a,{tok:new types.TBool(end==']')},b]}};\nList = Interval // override usual list atom",
-        jme: "[x,y) + (x,y) + (x,y] + [x,y]"
-    },
-    {
-        name: "operators",
-        code: "left associative binary operator \"%\" precedence 2;\nbinary operator \"mash\" precedence 11;\nprefix operator \"@\";\npostfix operator \"£\";",
-        jme: "(x%3) + (x mash y) + @x + x£"
-    },
-    {
-        name: "dictionary literal",
-        code: "KeyPair = name:Name ws \":\" ws expr:Expression {return {tok: new types.TList(),args:[name,expr]}};\nKeyPairList = first:KeyPair rest:(ws \",\" ws pair:KeyPair {return pair})* {return [first].concat(rest)};\natom Dictionary = \"{\" ws keypairs:KeyPairList ws \"}\" {return {tok: new types.TFunc('dict'),args:keypairs}}",
-        jme: "{a: 1, b: 2}"
-    },
-    {
-        name: 'lisp!',
-        code: "Expression = LispExpression / Atom\nLispExpression = \"(\" ws op:Name args:(ws atom:Expression ws {return atom})* \")\" {return {tok:new types.TFunc(op.tok.name),args:args}}",
-        jme: '(plus (minus x 1) 2)'
-    }
-];
