@@ -1,6 +1,9 @@
 ready().then(function() {
-    var parser = makeGrammar('');
-    Numbas.jme.compile = parser.parse;
+    Numbas.jme.compile = function(src) {
+        var parser = new nearley.Parser(jme_grammar.ParserRules,'main');
+        parser.feed(src);
+        return parser.finish()[0];
+    };
 
     var jme = Numbas.jme;
     var math = Numbas.math;

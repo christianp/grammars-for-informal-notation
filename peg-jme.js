@@ -192,3 +192,21 @@ function makeGrammar(grammar) {
     var parser = peg.compiler.compile(newGrammar,convertPasses(peg.compiler.passes),options);
     return parser;
 }
+
+
+function compile(source) {
+    var baseParser = new nearley.Parser(window.grammar.ParserRules,window.grammar.ParserStart);
+    baseParser.feed(source)
+    var compiled = Compile(baseParser.results[0],{});
+    var src = generate(compiled,'grammar');
+    src = '(function() { var module = {exports:{}};\n'+src+'\nreturn module.exports})()';
+    var g = eval(src);
+    function parse(str) {
+        var p = new nearley.Parser(g.ParserRules,g.ParserStart);
+        p.feed(str);
+        return p.finish();
+    }
+    return {parse:parse,grammar:g}
+}
+
+var jme_parser = new nearley.Parser(jme_grammar.ParserRules,'main');
