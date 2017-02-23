@@ -36,8 +36,35 @@ ready().then(function() {
         return deepEqual(value,expect,message);
     }
 
+
             test('Implicit multiplication',function() {
                 deepCloseEqual(compile('5x'),compile('5*x'),'5x');
+                // Note, in the next example we just paste in the JSON.  No need for this to be a string.
+                deepCloseEqual(compile('5x'),{
+  "tree": {
+    "tok": {
+      "type": "op",
+      "name": "*"
+    },
+    "args": [
+      {
+        "tok": {
+          "type": "number",
+          "value": 5,
+          "original": "5"
+        }
+      },
+      {
+        "tok": {
+          "type": "name",
+          "name": "x"
+        }
+      }
+    ]
+  },
+  "str": "5*x"
+},'5x');
+                deepCloseEqual(compile('5 x'),compile('5*x'),'5 x');
                 deepCloseEqual(compile('5(x+1)'),compile('5*(x+1)'),'5(x+1)');
                 deepCloseEqual(compile('(x+1)(x+2)'),compile('(x+1)*(x+2)'),'(x+1)(x+2)');
             });
