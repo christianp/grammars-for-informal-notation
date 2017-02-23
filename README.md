@@ -1,4 +1,10 @@
-We're working on coming up with a system which can parse student's ambiguous notation and either offer suggestions or decided what is meant based on context.
+We're working on a system which can parse student's ambiguous mathematical notation.
+
+1. Offer suggestions or decided what is meant based on context.
+2. Flexible parsing rules based on commonly used mathematical contexts. 
+3. Output the resulting parse-trees in a variety of languages, e.g. LaTeX, Maxima.
+
+The longer term goal of this work is to use the resulting parser in an online assessment system with students.
 
 ## To run the tests
 
