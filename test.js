@@ -1,8 +1,64 @@
 ready().then(function() {
+    var jme_parser = new nearley.Parser(jme_grammar.ParserRules,'main');
+
+    var synonyms = {
+        infix: {
+            '&':'and',
+            '&&':'and',
+            'divides': '|',
+            '||':'or',
+            'sqr':'sqrt',
+            'gcf': 'gcd',
+            'sgn':'sign',
+            'len': 'abs',
+            'length': 'abs',
+            'verb': 'verbatim'
+        },
+        prefix: {
+            '+': '+u',
+            '-': '-u',
+            '!': 'not'
+        },
+        postfix: {
+            '!': 'fact'
+        }
+    }
+
+    function do_synonyms(tree) {
+        if(tree.tok.type=='op' || tree.tok.type=='function') {
+            var args = tree.args.map(do_synonyms);
+            var tok = tree.tok;
+            var kind = tree.tok.prefix ? 'prefix' : tree.tok.postfix ? 'postfix' : 'infix';
+            var synonym = synonyms[kind][tree.tok.name];
+            if(synonym) {
+                tok = {type:tree.tok.type,name:synonym};
+            }
+            return {
+                tok: tok,
+                args: args
+            }
+        } else {
+            return tree;
+        }
+    }
+
+    function remove_lazy(tree) {
+        if(tree.tok.lazy) {
+            delete tree.tok.lazy;
+        }
+        if(tree.args) {
+            tree.args = tree.args.map(remove_lazy);
+        }
+        return tree;
+    }
+
     Numbas.jme.compile = function(src) {
         var parser = new nearley.Parser(jme_grammar.ParserRules,'main');
         parser.feed(src);
-        return parser.finish()[0];
+        var result = parser.finish()[0];
+        if(result) {
+            return remove_lazy(do_synonyms(result.tree));
+        }
     };
 
     var jme = Numbas.jme;

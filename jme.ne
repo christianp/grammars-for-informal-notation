@@ -13,7 +13,12 @@ function bracket(tree) {
 	}
 }
 
+function has_lazy(tree) {
+    return tree.tok.lazy==true;
+}
+
 function display(tree) {
+	try {
 	var tok = tree.tok;
 	switch(tok.type) {
 		case 'op':
@@ -25,13 +30,16 @@ function display(tree) {
 				return bracket(tree.args[0])+tok.name+bracket(tree.args[1])
 			}
 		case 'function':
-			return display(tok.name)+'('+tree.args.map(display).join(',')+')';
+			return tok.name+'('+tree.args.map(display).join(',')+')';
 		case 'name':
 			return tok.name;
 		case 'list':
 			return '['+tree.args.map(display).join(',')+']';
 		default:
 			return tok.value;
+	}
+	} catch(e) {
+		return '';
 	}
 }
 
@@ -46,7 +54,7 @@ StringChar[nd] ->
 	| "\\" [^n] {% nth(1) %}
 	| $nd {% function(d,l,r){if('{}\\'.indexOf(d[0])!=-1){return r}; return d[0][0]} %}
 	
-QuotedString[d,nd] -> $d String[$nd] $d {% function(d){return d[1]} %}
+QuotedString[d,nd] -> $d String[$nd] $d {% function(d){return {tok:{type:'string',value:d[1]}}} %}
 
 main -> Assignment | Expression {% function(d){ return {tree:d[0],str:display(d[0])} } %}
 
@@ -66,16 +74,26 @@ Assignment ->
 	| Name ws "=" Expression ws "or" ws Name ws "=" ws Expression {% function(d,l,r){return  } %}
 
 Expression ->
-	OpLevel4 {% lift %}
+	OpLevel13 {% lift %}
 
 LeftBinaryOp[ops,this,next] ->
-	  $next $ops $this {% function(d){ return {tok:{type:'op',name:d[1][0][0]},args:[d[0][0],d[2][0]]} } %}
+	  $next ws $ops ws $this {% function(d){ return {tok:{type:'op',name:d[2][0][0]},args:[d[0][0],d[4][0]]} } %}
 	| $next {% unbracket %}
 
 RightBinaryOp[ops,this,next] ->
-	  $this $ops $next {% function(d){ return {tok:{type:'op',name:d[1][0][0]},args:[d[0][0],d[2][0]]} } %}
+	  $this ws $ops ws $next {% function(d){ return {tok:{type:'op',name:d[2][0][0]},args:[d[0][0],d[4][0]]} } %}
 	| $next {% unbracket %}
 
+OpLevel13 -> RightBinaryOp[("xor"),OpLevel13,OpLevel12] {% lift %}
+OpLevel12 -> RightBinaryOp[("or"|"||"),OpLevel12,OpLevel11] {% lift %}
+OpLevel11 -> RightBinaryOp[("and"|"&&"),OpLevel11,OpLevel9] {% lift %}
+OpLevel9 -> RightBinaryOp[("isa"),OpLevel9,OpLevel8] {% lift %}
+OpLevel8 -> RightBinaryOp[("<>"|"="),OpLevel8,OpLevel7] {% lift %}
+OpLevel7 -> RightBinaryOp[(">="|"<="|">"|"<"),OpLevel7,OpLevel6_5] {% lift %}
+OpLevel6_5 -> RightBinaryOp[("in"|"except"),OpLevel6_5,OpLevel6] {% lift %}
+OpLevel6 -> RightBinaryOp[("#"),OpLevel6,OpLevel5_5] {% lift %}
+OpLevel5_5 -> RightBinaryOp[(".."),OpLevel5_5,OpLevel5] {% lift %}
+OpLevel5 -> RightBinaryOp[("|"),OpLevel5,OpLevel4] {% lift %}
 OpLevel4 -> RightBinaryOp[("+"|"-"),OpLevel4,OpLevel3] {% lift %}
 OpLevel3 -> RightBinaryOp[("*"|"/"),OpLevel3,OpLevel2] {% lift %}
 OpLevel2 -> LeftBinaryOp[("^"),OpLevel2,AtomExpression] {% lift %}
@@ -83,10 +101,13 @@ OpLevel2 -> LeftBinaryOp[("^"),OpLevel2,AtomExpression] {% lift %}
 AtomExpression ->
 	  Atom Trailer {% function(d){ return {tok:{type:"function",name:"listval"},args:d} } %}
 	| Atom {% lift %}
-	| PrefixOp Atom {% function(d) { return {tok:d[0].tok,args:[d[1]]} } %}
+	| PrefixExpression {% lift %}
 	| Atom PostfixOp {% function(d) { return {tok:d[1].tok,args:[d[0]]} } %}
 	
-PrefixOp -> ("+"|"-") {% function(d) {return {tok:{type:'op',name:d[0][0],prefix:true}} } %}
+PrefixExpression ->
+	(PrefixOp ws {% nth(0) %}):+ Atom {% function(d) { var tree = {tok:d[0][0]}; var current = tree; d[0].slice(1).forEach(function(b) { var btree = {tok:b}; current.args = [btree]; current = btree; }); current.args = [d[1]]; return tree;} %}
+	
+PrefixOp -> ("+"|"-") {% function(d) {return {type:'op',name:d[0][0],prefix:true} } %}
 PostfixOp -> ("!") {% function(d) {return {tok:{type:'op',name:d[0][0],postfix:true}} } %}
 	
 Trailer -> "[" Expression "]" {% nth(1) %}
@@ -103,13 +124,13 @@ StrictArgsList -> Expression ("," Expression {% nth(1) %}):* {% function(d) { re
 
 BracketedExpression -> "(" Expression ")" {% nth(1) %}
 	
-FunctionApplication -> FunctionName "(" ArgsList ")" {% function(d){ return {tok:{type:"function",name:d[0]},args:d[2]} } %}
+FunctionApplication -> FunctionName "(" ArgsList ")" {% function(d){ return {tok:{type:"function",name:d[0].tok.name},args:d[2]} } %}
 
 FunctionName -> Name {% lift %}
 FunctionName -> "log_" Number {% function(d) { return {tok:{type:"name",name:"log",base:d[1]}} } %}
 
 LazyMultiplication -> 
-	AtomExpression AtomExpression {% function(d,l,r){if(d[1].tok.type=='op' && d[1].tok.prefix){return r} return {tok:{type:"op",name:"*"},args:[d[0],d[1]]} } %}
+	AtomExpression (ws) AtomExpression {% function(d,l,r){if(has_lazy(d[0]) || has_lazy(d[2])) {return r;} return {tok:{type:"op",name:"*",lazy:true},args:[d[0],d[2]]} } %}
 
 Literal -> (Boolean | Name | Number | String) {% function(d){ return d[0][0] } %}
 
@@ -161,3 +182,4 @@ Boolean ->
 	) {% function(d){return {tok:{type:"boolean",value:d[0]}} } %}
 
 ws -> [\s]:* {% function(d){ return null } %}
+
